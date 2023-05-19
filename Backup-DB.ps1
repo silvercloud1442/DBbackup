@@ -17,5 +17,4 @@ if (!(Test-Path $targetServer\$targetPath)) {
 
 Backup-SqlDatabase -ServerInstance $sqlServerInstance -Database $sourceDatabase -BackupFile $backupPath\backup.bak -Initialize
 
-cd $backupPath
-Copy-Item -Path $backupPath\backup.bak -Destination $targetServer\$targetPath\backup.bak
+Copy-Item -Path "Microsoft.PowerShell.Core\FileSystem::$backupPath\backup.bak" -Destination "Microsoft.PowerShell.Core\FileSystem::$targetServer\$targetPath\backup.bak" -Recurse -Force
