@@ -6,12 +6,19 @@
 Add-Type -AssemblyName System.Windows.Forms
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
-$ini = C:\project\Get-iniFile.ps1 C:\project\config.ini
+$ver = "0.1"
+$dt = Get-Date -Format "dd-MM-yyyy"
+New-Item -ItemType directory log -Force | out-null # Создаю директорию для логов
 
+$global:logfilename = "log\" + $dt + "_LOG.log"
+[int]$global:errorcount = 0 # Ведем подсчет ошибок
+[int]$global:warningcount = 0 # Ведем подсчет предупреждений
+
+
+$ini = C:\project\Get-iniFile.ps1 C:\project\config.ini
 $sqlServerInstance = $ini["Server1"]["sqlServerInstance"]
 $sourceDatabase = $ini["Server1"]["sourceDatabase"]
 $backupPath = $ini['Server1']['backupPath']
-
 $targetServer = $ini['Server2']['targetServer']
 $targetPath = $ini['Server2']['targetPath']
 
@@ -94,9 +101,62 @@ $Form.controls.AddRange(@($Button1,$Server1Gruop,$Server2Group))
 $Server1Gruop.controls.AddRange(@($sqlServerInstanceLabel, $sourceDatabaseLabel, $backupPathLabel))
 $Server2Group.controls.AddRange(@($targetServerLabel,$targetTextBox,$targetPathLabel))
 
+Function global:Write-Log	# Функция пишет сообщения в лог-файл и выводит на экран.
+{
+	Param(
+		$message,
+		[string]$type = "info",
+		[string]$logfile = $global:logfilename,
+		[switch]$silent
+	)
+	
+	$dt = Get-Date -Format "dd.MM.yyyy HH:mm:ss"	
+	$msg = $dt + "`t" + $type + "`t" + $message # Формат: 01.01.2001 01:01:01 [tab] error [tab] Сообщение
+	Out-File -FilePath "Microsoft.PowerShell.Core\FileSystem::$logfile" -InputObject $msg -Append -encoding unicode
+	if (-not $silent.IsPresent){
+		switch ( $type.toLower() ){
+			"error"{			
+				$global:errorcount++
+				Write-Host $msg -ForegroundColor red			
+			}
+			"warning"{			
+				$global:warningcount++
+				Write-Host $msg -ForegroundColor yellow
+			}
+			"completed"{			
+				Write-Host $msg -ForegroundColor green
+			}
+			"info"{			
+				Write-Host $msg
+			}			
+			default{ 
+				Write-Host $msg
+			}
+		}
+	}
+}
+
 $Button1.Add_Click({
+    Write-Log "backup : start"
+    try {
+        Backup-SqlDatabase -ServerInstance $sqlServerInstance -Database $sourceDatabase -BackupFile "$backupPath\backup.bak" -Initialize
+    
+    }
+    catch {
+        Write-Log $_ "error"
+        Exit
+    }
+    Write-Log "backup : completed" "completed"
 
-
+    Write-Log "Copy to target Server : start"
+    try{
+        Copy-Item -Path "Microsoft.PowerShell.Core\FileSystem::$backupPath\backup.bak" -Destination "Microsoft.PowerShell.Core\FileSystem::$targetServer\$targetPath\backup.bak" -Recurse -Force
+    }
+    catch{
+        Write-Log $_ "error"
+        Exit
+    }
+    Write-Log "Copy to target Server : completed" "completed" 
   })
 
 #region Logic 
