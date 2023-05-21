@@ -14,14 +14,21 @@ $global:logfilename = "log\" + $dt + "_LOG.log"
 [int]$global:errorcount = 0 # Ведем подсчет ошибок
 [int]$global:warningcount = 0 # Ведем подсчет предупреждений
 
-
-$ini = C:\project\Get-iniFile.ps1 C:\project\config.ini
-$sqlServerInstance = $ini["Server1"]["sqlServerInstance"]
-$sourceDatabase = $ini["Server1"]["sourceDatabase"]
-$backupPath = $ini['Server1']['backupPath']
-$targetServer = $ini['Server2']['targetServer']
-$targetPath = $ini['Server2']['targetPath']
-
+try {
+    Write-Log "Get ini : start"
+    $ini = C:\project\Get-iniFile.ps1 C:\project\config.ini
+    $sqlServerInstance = $ini["Server1"]["sqlServerInstance"]
+    $sourceDatabase = $ini["Server1"]["sourceDatabase"]
+    $backupPath = $ini['Server1']['backupPath']
+    $global:targetServer = $ini['Server2']['targetServer']
+    $targetPath = $ini['Server2']['targetPath']
+}
+catch
+{
+    Write-Log "Get ini : $_" 'error'
+    Exit
+}
+Write-Log "Get ini : completed" 'completed'
 
 $Form                            = New-Object system.Windows.Forms.Form
 $Form.ClientSize                 = New-Object System.Drawing.Point(368,425)
@@ -136,28 +143,50 @@ Function global:Write-Log	# Функция пишет сообщения в ло
 	}
 }
 
-$Button1.Add_Click({
+Function global:Backup-db
+{
+    $Button1.Text = "Backup..."
+    if ((Test-Path "Microsoft.PowerShell.Core\FileSystem::$targetServer\$targetPath\")){
     Write-Log "backup : start"
-    try {
-        Backup-SqlDatabase -ServerInstance $sqlServerInstance -Database $sourceDatabase -BackupFile "$backupPath\backup.bak" -Initialize
+        try {
+            Backup-SqlDatabase -ServerInstance $sqlServerInstance -Database $sourceDatabase -BackupFile "$backupPath\backup.bak" -Initialize
     
-    }
-    catch {
-        Write-Log $_ "error"
-        Exit
-    }
-    Write-Log "backup : completed" "completed"
+        }
+        catch {
+            Write-Log $_ "error"
+            return $_
+        }
+        Write-Log "backup : completed" "completed"
 
-    Write-Log "Copy to target Server : start"
-    try{
-        Copy-Item -Path "Microsoft.PowerShell.Core\FileSystem::$backupPath\backup.bak" -Destination "Microsoft.PowerShell.Core\FileSystem::$targetServer\$targetPath\backup.bak" -Recurse -Force
+        Write-Log "Copy to target Server : start"
+        try{
+            Copy-Item -Path "Microsoft.PowerShell.Core\FileSystem::$backupPath\backup.bak" -Destination "Microsoft.PowerShell.Core\FileSystem::$targetServer\$targetPath\backup.bak" -Recurse -Force
+        }
+        catch{
+            Write-Log $_ "error"
+            return $_
+        }
+        Write-Log "Copy to target Server : completed" "completed"
+        $ini['Server2']['targetServer'] = $global:targetServer
+        $ini | C:\project\Out-IniFile.ps1 "C:\project\config.ini" -Force
+        return 'completed'
     }
-    catch{
-        Write-Log $_ "error"
-        Exit
+    else {
+        Write-log "Invalid target path: $targetServer\$targetPath\" 'error'
+        return "Invalid target path"
     }
-    Write-Log "Copy to target Server : completed" "completed" 
-  })
+}
+
+
+$targetTextBox.Add_KeyUp({
+    $global:targetServer = [string]::Concat("\\", $targetTextbox.Text)
+    $targetPathLabel.text = [string]::Concat("Target path: \\", $targetServer.Substring(2), "\$targetPath")
+})
+
+
+$Button1.Add_Click({
+    $Button1.Text = Backup-db
+})
 
 #region Logic 
 
