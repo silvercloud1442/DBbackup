@@ -14,6 +14,75 @@ $global:logfilename = "log\" + $dt + "_LOG.log"
 [int]$global:errorcount = 0 # Ведем подсчет ошибок
 [int]$global:warningcount = 0 # Ведем подсчет предупреждений
 
+Function global:Write-Log	# Функция пишет сообщения в лог-файл и выводит на экран.
+{
+	Param(
+		$message,
+		[string]$type = "info",
+		[string]$logfile = $global:logfilename,
+		[switch]$silent
+	)
+	
+	$dt = Get-Date -Format "dd.MM.yyyy HH:mm:ss"	
+	$msg = $dt + "`t" + $type + "`t" + $message # Формат: 01.01.2001 01:01:01 [tab] error [tab] Сообщение
+	Out-File -FilePath "Microsoft.PowerShell.Core\FileSystem::$logfile" -InputObject $msg -Append -encoding unicode
+	if (-not $silent.IsPresent){
+		switch ( $type.toLower() ){
+			"error"{			
+				$global:errorcount++
+				Write-Host $msg -ForegroundColor red			
+			}
+			"warning"{			
+				$global:warningcount++
+				Write-Host $msg -ForegroundColor yellow
+			}
+			"completed"{			
+				Write-Host $msg -ForegroundColor green
+			}
+			"info"{			
+				Write-Host $msg
+			}			
+			default{ 
+				Write-Host $msg
+			}
+		}
+	}
+}
+
+Function global:Backup-db
+{
+    $Button1.Text = "Backup..."
+    if ((Test-Path "Microsoft.PowerShell.Core\FileSystem::$targetServer\$targetPath\")){
+    Write-Log "backup : start"
+        try {
+            Backup-SqlDatabase -ServerInstance $sqlServerInstance -Database $sourceDatabase -BackupFile "$backupPath\backup.bak" -Initialize
+    
+        }
+        catch {
+            Write-Log $_ "error"
+            return $_
+        }
+        Write-Log "backup : completed" "completed"
+
+        Write-Log "Copy to target Server : start"
+        try{
+            Copy-Item -Path "Microsoft.PowerShell.Core\FileSystem::$backupPath\backup.bak" -Destination "Microsoft.PowerShell.Core\FileSystem::$targetServer\$targetPath\backup.bak" -Recurse -Force
+        }
+        catch{
+            Write-Log $_ "error"
+            return $_
+        }
+        Write-Log "Copy to target Server : completed" "completed"
+        $ini['Server2']['targetServer'] = $global:targetServer
+        $ini | C:\project\Out-IniFile.ps1 "C:\project\config.ini" -Force
+        return 'completed'
+    }
+    else {
+        Write-log "Invalid target path: $targetServer\$targetPath\" 'error'
+        return "Invalid target path"
+    }
+}
+
 try {
     Write-Log "Get ini : start"
     $ini = C:\project\Get-iniFile.ps1 C:\project\config.ini
@@ -107,75 +176,6 @@ $Form.controls.AddRange(@($Button1,$Server1Gruop,$Server2Group))
 
 $Server1Gruop.controls.AddRange(@($sqlServerInstanceLabel, $sourceDatabaseLabel, $backupPathLabel))
 $Server2Group.controls.AddRange(@($targetServerLabel,$targetTextBox,$targetPathLabel))
-
-Function global:Write-Log	# Функция пишет сообщения в лог-файл и выводит на экран.
-{
-	Param(
-		$message,
-		[string]$type = "info",
-		[string]$logfile = $global:logfilename,
-		[switch]$silent
-	)
-	
-	$dt = Get-Date -Format "dd.MM.yyyy HH:mm:ss"	
-	$msg = $dt + "`t" + $type + "`t" + $message # Формат: 01.01.2001 01:01:01 [tab] error [tab] Сообщение
-	Out-File -FilePath "Microsoft.PowerShell.Core\FileSystem::$logfile" -InputObject $msg -Append -encoding unicode
-	if (-not $silent.IsPresent){
-		switch ( $type.toLower() ){
-			"error"{			
-				$global:errorcount++
-				Write-Host $msg -ForegroundColor red			
-			}
-			"warning"{			
-				$global:warningcount++
-				Write-Host $msg -ForegroundColor yellow
-			}
-			"completed"{			
-				Write-Host $msg -ForegroundColor green
-			}
-			"info"{			
-				Write-Host $msg
-			}			
-			default{ 
-				Write-Host $msg
-			}
-		}
-	}
-}
-
-Function global:Backup-db
-{
-    $Button1.Text = "Backup..."
-    if ((Test-Path "Microsoft.PowerShell.Core\FileSystem::$targetServer\$targetPath\")){
-    Write-Log "backup : start"
-        try {
-            Backup-SqlDatabase -ServerInstance $sqlServerInstance -Database $sourceDatabase -BackupFile "$backupPath\backup.bak" -Initialize
-    
-        }
-        catch {
-            Write-Log $_ "error"
-            return $_
-        }
-        Write-Log "backup : completed" "completed"
-
-        Write-Log "Copy to target Server : start"
-        try{
-            Copy-Item -Path "Microsoft.PowerShell.Core\FileSystem::$backupPath\backup.bak" -Destination "Microsoft.PowerShell.Core\FileSystem::$targetServer\$targetPath\backup.bak" -Recurse -Force
-        }
-        catch{
-            Write-Log $_ "error"
-            return $_
-        }
-        Write-Log "Copy to target Server : completed" "completed"
-        $ini['Server2']['targetServer'] = $global:targetServer
-        $ini | C:\project\Out-IniFile.ps1 "C:\project\config.ini" -Force
-        return 'completed'
-    }
-    else {
-        Write-log "Invalid target path: $targetServer\$targetPath\" 'error'
-        return "Invalid target path"
-    }
-}
 
 
 $targetTextBox.Add_KeyUp({
